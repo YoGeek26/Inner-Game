@@ -9,8 +9,8 @@
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "server": "cd backend && node server.js",
-    "dev:full": "concurrently \"npm run dev\" \"npm run server\""
-     "start": "cd backend && node server.js"
+    "dev:full": "concurrently \"npm run dev\" \"npm run server\"",
+    "start": "cd backend && node server.js"
   },
   "dependencies": {
     "axios": "^1.6.0",
