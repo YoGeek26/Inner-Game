@@ -1,8 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
@@ -10,6 +8,7 @@ import usersRoutes from './routes/users.js';
 import challengesRoutes from './routes/challenges.js';
 import articlesRoutes from './routes/articles.js';
 import aiRoutes from './routes/ai.js';
+import initializeDatabase from './config/db.js';
 
 dotenv.config();
 
@@ -25,10 +24,52 @@ app.use(express.json());
 app.use(cors());
 
 // Initialize database connection
-const db = new sqlite3.Database(path.join(__dirname, './data/inner-game.db'));
+const initApp = async () => {
+  try {
+    const db = await initializeDatabase();
+    
+    // Set up database tables if they don't exist
+    await setupDatabase(db);
+    
+    // Make DB available to routes
+    app.locals.db = db;
+    
+    // Define routes
+    app.use('/api/auth', authRoutes);
+    app.use('/api/users', usersRoutes);
+    app.use('/api/challenges', challengesRoutes);
+    app.use('/api/articles', articlesRoutes);
+    app.use('/api/ai', aiRoutes);
 
-// Set up database tables if they don't exist
-const initDb = async () => {
+    // Serve static assets in production
+    if (process.env.NODE_ENV === 'production') {
+      // Serve frontend static files
+      app.use(express.static(path.join(__dirname, '../dist')));
+      
+      // Any route that doesn't match API will be redirected to index.html
+      app.get('*', (req, res) => {
+        res.sendFile(path.resolve(__dirname, '../dist', 'index.html'));
+      });
+    } else {
+      // Basic route for development
+      app.get('/', (req, res) => {
+        res.send('Inner Game API Running');
+      });
+    }
+
+    // Start server
+    app.listen(PORT, () => {
+      console.log(`Server started on port ${PORT}`);
+    });
+    
+  } catch (err) {
+    console.error('Server initialization error:', err);
+    process.exit(1);
+  }
+};
+
+// Set up database tables
+const setupDatabase = async (db) => {
   try {
     // Users table
     db.exec(`
@@ -48,6 +89,7 @@ const initDb = async () => {
       )
     `);
 
+    // Rest of the database setup code remains the same
     // Challenges table
     db.exec(`
       CREATE TABLE IF NOT EXISTS challenges (
@@ -264,31 +306,12 @@ const initDb = async () => {
     console.log('Database initialized successfully');
   } catch (err) {
     console.error('Database initialization error:', err.message);
+    throw err;
   }
 };
 
-// Initialize database
-initDb();
-
-// Make DB available to routes
-app.locals.db = db;
-
-// Define routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', usersRoutes);
-app.use('/api/challenges', challengesRoutes);
-app.use('/api/articles', articlesRoutes);
-app.use('/api/ai', aiRoutes);
-
-// Basic route
-app.get('/', (req, res) => {
-  res.send('Inner Game API Running');
-});
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server started on port ${PORT}`);
-});
+// Start the application
+initApp();
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
@@ -297,7 +320,9 @@ process.on('unhandledRejection', (err) => {
 
 // Handle server shutdown
 process.on('SIGINT', () => {
-  db.close();
-  console.log('Database connection closed');
+  if (app.locals.db) {
+    app.locals.db.close();
+    console.log('Database connection closed');
+  }
   process.exit(0);
 });
